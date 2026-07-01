@@ -54,6 +54,14 @@ npm run build
 npm test
 ```
 
+**`dist/` is committed** (unlike `kami-nv-compat`, which has no git-dependency
+consumers) — `etzhayyim-sdk` and other consumers install this package via a
+`git+ssh://` URL, and environments with a script-execution allowlist (e.g.
+`allow-scripts`) will not run the `prepare` build step on install. CI
+rebuilds and diffs `dist/` on every push to catch drift; after any `src/`
+change, run `npm run build` and commit the updated `dist/` in the same
+commit.
+
 ## License
 
 Apache 2.0 + Charter Compliance Rider v3.6 (`/CHARTER-RIDER.md`).
