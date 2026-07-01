@@ -9,8 +9,9 @@
    See kotoba.lang.pqh.pq's namespace docstring for the one documented,
    deliberate divergence from the TS API (ML-DSA-65 secret-key
    representation)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.pq :as pq]
+            [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.vectors :as v])
   (:import (org.bouncycastle.crypto.params X25519PrivateKeyParameters X25519PublicKeyParameters
@@ -20,6 +21,8 @@
            (org.bouncycastle.pqc.crypto.mlkem MLKEMParameters MLKEMPrivateKeyParameters
                                                MLKEMExtractor)
            (org.bouncycastle.pqc.crypto.mldsa MLDSAParameters MLDSAPrivateKeyParameters)))
+
+(use-fixtures :each (fn [f] (binding [pq/*pq* (pq-bc/bc-pq)] (f))))
 
 ;; ── cross-language known-answer vectors ──────────────────────────────────
 
