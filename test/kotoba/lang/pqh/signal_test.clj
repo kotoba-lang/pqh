@@ -6,9 +6,10 @@
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.crypto :as crypto]
             [kotoba.lang.pqh.aead-bc :as aead-bc]
+            [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]))
 
-(use-fixtures :each (fn [f] (sig/clear-sessions!) (binding [crypto/*aead* (aead-bc/bc-aead)] (f))))
+(use-fixtures :each (fn [f] (sig/clear-sessions!) (binding [crypto/*aead* (aead-bc/bc-aead) pq/*pq* (pq-bc/bc-pq)] (f))))
 
 (def sender-did "did:example:sender")
 (def recipient-did "did:example:recipient")

@@ -4,12 +4,15 @@
    (kotoba.lang.pqh.vectors) proving this namespace's Ed25519 sign/verify
    (via kotoba-lang/ed25519) is byte-identical to @noble/curves/ed25519 for
    the same seed/message (both public key AND signature bytes)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [ed25519.core :as ed]
             [kotoba.lang.pqh.did-signal :as ds]
             [kotoba.lang.pqh.pq :as pq]
+            [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.vectors :as v]))
+
+(use-fixtures :each (fn [f] (binding [pq/*pq* (pq-bc/bc-pq)] (f))))
 
 ;; ── cross-language known-answer vectors ──────────────────────────────────
 
