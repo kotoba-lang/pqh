@@ -1,15 +1,14 @@
 (ns kotoba.lang.pqh.kdf
   "Password-based key derivation seam (suite \"argon2id-v1\") -- JVM port of
-   pqh's src/kdf.ts. Argon2id (RFC 9106) via Bouncy Castle's
-   Argon2BytesGenerator (`bcprov-jdk18on`), verified byte-identical to
-   @noble/hashes' argon2id for the same password/salt/params in this port's
-   test suite (kotoba.lang.pqh.kdf-test).
+   pqh's src/kdf.ts. Argon2id (RFC 9106) is an injected `IKdf` capability --
+   bind `*kdf*` to a host impl (JVM BouncyCastle in the test fixture
+   `kotoba.lang.pqh.kdf-bc`; cljs @noble/hashes). This namespace imports no
+   vendor SDK. Verified byte-identical to @noble/hashes' argon2id for the same
+   password/salt/params in this port's test suite (kotoba.lang.pqh.kdf-test).
 
    JVM-only: Web Crypto has no native Argon2id primitive (only PBKDF2/HKDF),
    so a CLJS branch would mean hand-porting @noble/hashes' pure-JS Argon2id
-   into ClojureScript -- deferred; see this repo's README."
-  (:import (org.bouncycastle.crypto.generators Argon2BytesGenerator)
-           (org.bouncycastle.crypto.params Argon2Parameters Argon2Parameters$Builder)))
+   into ClojureScript -- deferred; see this repo's README.")
 
 (def KDF-ARGON2ID-V1 "argon2id-v1")
 ;; Legacy suite id kept for read-compat envelope dispatch.
@@ -25,6 +24,26 @@
 ;; RFC 9106 second recommended option (64 MiB, t=3) for non-interactive use.
 (def ARGON2ID-HIGH-PARAMS {:m-kib 65536 :t 3 :p 1})
 
+;; ── KDF capability seam ───────────────────────────────────────────────────
+;; The pure core never imports a vendor crypto SDK; the raw Argon2id primitive
+;; is supplied by the host via IKdf. Bind `*kdf*` before calling
+;; derive-key-argon2id.
+
+(defprotocol IKdf
+  "Raw password-based KDF primitive. Host supplies a vetted impl
+   (JVM BouncyCastle Argon2id; cljs @noble/hashes)."
+  (-argon2id [this password salt m-kib t p dk-len]))
+
+(def ^:dynamic *kdf*
+  "Current IKdf impl. Bind via `(binding [kdf/*kdf* impl] ...)` before any KDF
+   call; nil by default (calling unbound throws).")
+
+(defn- assert-kdf []
+  (or *kdf*
+      (throw (ex-info
+               "[kotoba.lang.pqh/kdf] *kdf* not bound -- bind an IKdf impl (e.g. kotoba.lang.pqh.kdf-bc/bc-kdf) before KDF calls"
+               {}))))
+
 (defn derive-key-argon2id
   "opts: {:password (string or bytes), :salt bytes (>= 8 bytes),
           :params {:m-kib :t :p} (default ARGON2ID-DEFAULT-PARAMS),
@@ -38,14 +57,5 @@
     (when (or (< m-kib (* 8 p)) (< t 1) (< p 1))
       (throw (ex-info "[kotoba.lang.pqh/kdf] invalid Argon2id parameters" {})))
     (let [pw-bytes (if (string? password) (.getBytes ^String password "UTF-8") password)
-          bc-params (-> (Argon2Parameters$Builder. Argon2Parameters/ARGON2_id)
-                        (.withSalt salt)
-                        (.withParallelism (int p))
-                        (.withMemoryAsKB (int m-kib))
-                        (.withIterations (int t))
-                        (.withVersion Argon2Parameters/ARGON2_VERSION_13)
-                        (.build))
-          gen (doto (Argon2BytesGenerator.) (.init bc-params))
-          out (byte-array dk-len)]
-      (.generateBytes gen ^bytes pw-bytes out)
+          out (-argon2id (assert-kdf) pw-bytes salt m-kib t p dk-len)]
       {:suite KDF-ARGON2ID-V1 :key out :params params})))

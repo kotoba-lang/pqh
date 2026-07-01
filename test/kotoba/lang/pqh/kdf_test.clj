@@ -3,10 +3,13 @@
    (kotoba.lang.pqh.vectors) proving this namespace's Argon2id (via Bouncy
    Castle's Argon2BytesGenerator) is byte-identical to @noble/hashes'
    argon2id for the same password/salt/params."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.kdf :as kdf]
+            [kotoba.lang.pqh.kdf-bc :as kdf-bc]
             [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.vectors :as v]))
+
+(use-fixtures :each (fn [f] (binding [kdf/*kdf* (kdf-bc/bc-kdf)] (f))))
 
 ;; ── cross-language known-answer vectors ──────────────────────────────────
 
