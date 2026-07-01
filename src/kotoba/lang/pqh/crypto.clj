@@ -12,17 +12,16 @@
    XChaCha20-Poly1305 is composed from two verified building blocks:
    HChaCha20 subkey derivation (hand-rolled here, cross-checked byte-for-byte
    against @noble/ciphers' exported `hchacha()` for the same key/nonce) plus
-   Bouncy Castle's standard RFC 8439 ChaCha20-Poly1305 AEAD (`bcprov-jdk18on`,
-   `org.bouncycastle.crypto.modes.ChaCha20Poly1305`) for the inner 12-byte-nonce
-   AEAD step. The full pipeline (key, 24-byte nonce, aad, plaintext) is
-   verified byte-identical to @noble/ciphers' xchacha20poly1305 in this port's
-   test suite (kotoba.lang.pqh.crypto-test)."
+   an injected `IAead` capability (RFC 8439 ChaCha20-Poly1305, 12-byte nonce)
+   for the inner AEAD step -- bind `*aead*` to a host impl (JVM BouncyCastle
+   in the test fixture `kotoba.lang.pqh.aead-bc`; cljs would use
+   @noble/ciphers). This namespace imports no vendor SDK. The full pipeline
+   (key, 24-byte nonce, aad, plaintext) is verified byte-identical to
+   @noble/ciphers' xchacha20poly1305 in this port's test suite
+   (kotoba.lang.pqh.crypto-test)."
   (:require [cbor.core :as cbor]
             [kotoba.lang.pqh.util :as u])
-  (:import (org.bouncycastle.crypto.modes ChaCha20Poly1305)
-           (org.bouncycastle.crypto.params AEADParameters KeyParameter)
-           (org.bouncycastle.crypto InvalidCipherTextException)
-           (java.time Instant)
+  (:import (java.time Instant)
            (java.util Arrays)))
 
 (def AEAD-ALG "xchacha20poly1305")
@@ -34,6 +33,27 @@
 ;; Padding bucket schedule per ADR-2605181200.
 (def PAD-BUCKETS [1024 4096 16384 65536])
 (def PAD-SCHEME-ISO7816 "iso7816-4")
+
+;; ── AEAD capability seam ──────────────────────────────────────────────────
+;; The pure core never imports a vendor crypto SDK; the raw IETF
+;; ChaCha20-Poly1305 primitive is supplied by the host via IAead. Bind
+;; `*aead*` (e.g. to kotoba.lang.pqh.aead-bc/bc-aead) before AEAD calls.
+
+(defprotocol IAead
+  "Raw IETF ChaCha20-Poly1305 AEAD -- 32-byte key, 12-byte nonce, 128-bit tag.
+   Host supplies a vetted impl (JVM BouncyCastle, cljs @noble/ciphers)."
+  (-aead12-encrypt [this key nonce12 aad plaintext])
+  (-aead12-decrypt [this key nonce12 aad ciphertext]))
+
+(def ^:dynamic *aead*
+  "Current IAead impl. Bind via `(binding [crypto/*aead* impl] ...)` before any
+   AEAD call; nil by default (calling unbound throws).")
+
+(defn- assert-aead []
+  (or *aead*
+      (throw (ex-info
+               "[kotoba.lang.pqh/crypto] *aead* not bound -- bind an IAead impl (e.g. kotoba.lang.pqh.aead-bc/bc-aead) before AEAD calls"
+               {}))))
 
 (defn generate-key
   "Fresh 32-byte XChaCha20-Poly1305 key."
@@ -146,42 +166,28 @@
           (dotimes [j 4] (aset out (+ (* oi 4) j) (nth bs j)))))
       out)))
 
-;; ── XChaCha20-Poly1305 (HChaCha20 subkey + BC's standard ChaCha20Poly1305) ──
+;; ── XChaCha20-Poly1305 (pure HChaCha20 subkey + injected IETF ChaCha20-Poly1305)
 
-(defn- xchacha-cipher
-  ^ChaCha20Poly1305 [^bytes key ^bytes nonce24 aad for-encryption?]
+(defn xchacha20poly1305-encrypt
+  "key must be 32 bytes, nonce24 must be 24 bytes. aad may be nil.
+   Requires `*aead*` bound to an IAead impl."
+  ^bytes [^bytes key ^bytes nonce24 aad ^bytes plaintext]
   (when (not= NONCE-BYTES (alength nonce24))
     (throw (ex-info (str "[kotoba.lang.pqh/crypto] nonce must be " NONCE-BYTES " bytes") {})))
   (let [subkey (hchacha20 key (Arrays/copyOfRange nonce24 0 16))
         inner-nonce (byte-array 12)]
     (System/arraycopy nonce24 16 inner-nonce 4 8)
-    (let [cipher (ChaCha20Poly1305.)
-          params (if aad
-                   (AEADParameters. (KeyParameter. subkey) 128 inner-nonce ^bytes aad)
-                   (AEADParameters. (KeyParameter. subkey) 128 inner-nonce))]
-      (.init cipher (boolean for-encryption?) params)
-      cipher)))
-
-(defn xchacha20poly1305-encrypt
-  "key must be 32 bytes, nonce24 must be 24 bytes. aad may be nil."
-  ^bytes [^bytes key ^bytes nonce24 aad ^bytes plaintext]
-  (let [cipher (xchacha-cipher key nonce24 aad true)
-        out (byte-array (.getOutputSize cipher (alength plaintext)))
-        len1 (.processBytes cipher plaintext 0 (alength plaintext) out 0)
-        len2 (.doFinal cipher out len1)]
-    (Arrays/copyOf out (+ len1 len2))))
+    (-aead12-encrypt (assert-aead) subkey inner-nonce aad plaintext)))
 
 (defn xchacha20poly1305-decrypt
-  "Throws on AEAD tag verification failure."
+  "Throws on AEAD tag verification failure. Requires `*aead*` bound."
   ^bytes [^bytes key ^bytes nonce24 aad ^bytes ciphertext]
-  (let [cipher (xchacha-cipher key nonce24 aad false)
-        out (byte-array (.getOutputSize cipher (alength ciphertext)))]
-    (try
-      (let [len1 (.processBytes cipher ciphertext 0 (alength ciphertext) out 0)
-            len2 (.doFinal cipher out len1)]
-        (Arrays/copyOf out (+ len1 len2)))
-      (catch InvalidCipherTextException e
-        (throw (ex-info "[kotoba.lang.pqh/crypto] AEAD authentication failed" {} e))))))
+  (when (not= NONCE-BYTES (alength nonce24))
+    (throw (ex-info (str "[kotoba.lang.pqh/crypto] nonce must be " NONCE-BYTES " bytes") {})))
+  (let [subkey (hchacha20 key (Arrays/copyOfRange nonce24 0 16))
+        inner-nonce (byte-array 12)]
+    (System/arraycopy nonce24 16 inner-nonce 4 8)
+    (-aead12-decrypt (assert-aead) subkey inner-nonce aad ciphertext)))
 
 ;; ── envelope encrypt/decrypt ─────────────────────────────────────────────
 

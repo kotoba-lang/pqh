@@ -3,13 +3,16 @@
    (kotoba.lang.pqh.vectors) proving this namespace's XChaCha20-Poly1305 AEAD
    and canonical CBOR encoding are byte-identical to @noble/ciphers'
    xchacha20poly1305 and @ipld/dag-cbor's encode -- not just \"does it run\"."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [cbor.core :as cbor]
             [kotoba.lang.pqh.crypto :as crypto]
+            [kotoba.lang.pqh.aead-bc :as aead-bc]
             [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.vectors :as v]))
 
 (def SENDER "did:web:alice.example")
+
+(use-fixtures :each (fn [f] (binding [crypto/*aead* (aead-bc/bc-aead)] (f))))
 
 ;; ── cross-language known-answer vectors ──────────────────────────────────
 
