@@ -4,19 +4,20 @@
 password-based KDF, a post-quantum hybrid layer, DID&harr;Signal identity
 binding, and a deprecated toy Signal-session stand-in.
 
-| Module | What it does |
+| Namespace | What it does |
 |---|---|
-| `crypto.ts` | XChaCha20-Poly1305 AEAD envelope (24-byte nonce, 16-byte tag) over dag-cbor, with an ISO/IEC-7816-4 padding-bucket scheme |
-| `kdf.ts` | Argon2id (RFC 9106) password-based key derivation, suite `argon2id-v1` |
-| `pq.ts` | Post-quantum hybrid layer, suite `pqh-v1`: X25519+ML-KEM-768 (FIPS 203) KEM combiner, Ed25519+ML-DSA-65 (FIPS 204) dual signatures |
-| `did-signal.ts` | DID&harr;Signal `IdentityKey` binding verification (did:web / did:plc / did:key), with optional ML-DSA-65 hybrid signature |
-| `signal.ts` | **Deprecated** in-memory session/key-wrap stand-in, retained only because a real test (`pq.test.ts`) exercises the PQ-hybrid-into-session-wrap path against it |
+| `crypto.clj` | XChaCha20-Poly1305 AEAD envelope (24-byte nonce, 16-byte tag) over dag-cbor, with an ISO/IEC-7816-4 padding-bucket scheme; raw AEAD behind the `IAead` seam |
+| `kdf.clj` | Argon2id (RFC 9106) password-based key derivation, suite `argon2id-v1`; raw Argon2id behind the `IKdf` seam |
+| `pq.clj` | Post-quantum hybrid layer, suite `pqh-v1`: X25519+ML-KEM-768 (FIPS 203) KEM combiner, Ed25519+ML-DSA-65 (FIPS 204) dual signatures; raw primitives behind the `IPq` seam |
+| `did_signal.clj` | DID&harr;Signal `IdentityKey` binding verification (did:web / did:plc / did:key), with optional ML-DSA-65 hybrid signature |
+| `signal.clj` | **Deprecated** in-memory session/key-wrap stand-in, retained only because a real test exercises the PQ-hybrid-into-session-wrap path against it |
 
 Zero business-logic coupling — every collection/DID/purpose value is a plain
-parameter, not a hardcoded etzhayyim NSID. Apps are expected to import this
-seam instead of the underlying libraries directly (`@noble/ciphers`,
-`@noble/hashes`, `@noble/post-quantum`, `@noble/curves`) — see
-`70-tools/scripts/lint/substrate-boundary.mjs` in `etzhayyim/root`.
+parameter, not a hardcoded etzhayyim NSID. Per ADR-2607012200 the pure core
+imports no vendor crypto SDK: the raw primitives (XChaCha20-Poly1305, Argon2id,
+X25519/ML-KEM/ML-DSA, HKDF) are injected capabilities (`IAead`/`IKdf`/`IPq`)
+bound via dynamic vars, with the JVM BouncyCastle host impls in the test
+fixtures `test/kotoba/lang/pqh/{aead,kdf,pq}_bc.clj`.
 
 ## Provenance
 
@@ -34,28 +35,34 @@ AEAD *interface*, no cipher implementation). Different abstraction layer,
 same domain name; a future CLJC port of this package could plausibly build
 on that repo's primitives rather than duplicate them.
 
-Unlike the earlier `kami-nv-compat` relocation, this package has real
-consumers inside `etzhayyim-sdk` (`encrypted.ts`) and in a downstream app
-(`60-apps/etzhayyim-project-karute`'s svelte `sdk-init.ts`, via
-`@etzhayyim/sdk/signal`). `etzhayyim-sdk`'s own `src/{crypto,kdf,pq,
-did-signal,signal}.ts` become thin re-export shims over this package (`export
-* from "@etzhayyim/pqh/<module>.js"`) so every existing `@etzhayyim/sdk/*`
-import path keeps working unchanged.
+Former TS consumers (`etzhayyim-sdk`'s re-export shims, the karute app via
+`@etzhayyim/sdk/signal`) consumed this package's now-deleted npm `dist/`. With
+the TypeScript deleted per ADR-2607012200, those paths need reconciliation to
+the Clojure implementation. The only in-tree source dependency was
+`kotoba-lang/checkpointer`'s `src/checkpointer.ts`, which is itself ported to
+Clojure in a follow-up step (ADR-2607012200 §Step-6); other references are
+doc/ADR only.
 
-The initial relocation was a **physical move only** (TypeScript unchanged,
-same as `kami-nv-compat`'s relocation). A Clojure port has since landed (see
-below) and is the canonical implementation for new Clojure/babashka
-consumers going forward; the TypeScript implementation (`src/*.ts` +
-committed `dist/`) is unchanged and remains the npm-consumable artifact for
-`etzhayyim-sdk`'s re-export shim and the karute app.
+The initial relocation was a **physical move only** (TypeScript unchanged).
+A Clojure port then landed and is now the only implementation: the TypeScript
+(`src/*.ts` + committed `dist/`) was deleted per ADR-2607012200 (the
+`kotoba-lang` org's pure-Clojure admission rule), with the crypto primitives
+moved behind injected-capability seams (`IAead`/`IKdf`/`IPq`).
 
-## Clojure/CLJC port
+## Clojure port
 
 `src/kotoba/lang/pqh/{crypto,kdf,pq,did_signal,signal}.clj` is a port of the
-five TS modules above, one namespace per file
+five former TS modules, one namespace per file
 (`kotoba.lang.pqh.{crypto,kdf,pq,did-signal,signal}`), following the
 `kotoba.lang.*` namespace convention established by `kotoba-lang/crypto` and
-`kotoba-lang/ipfs`.
+`kotoba-lang/ipfs`. Per ADR-2607012200 the pure core imports no vendor crypto
+SDK: the raw primitives are injected capabilities (`crypto/IAead`,
+`kdf/IKdf`, `pq/IPq`) bound via dynamic vars, with JVM BouncyCastle host
+impls in `test/kotoba/lang/pqh/{aead,kdf,pq}_bc.clj`. The "crypto library
+choices" below name the BouncyCastle primitives those host impls wrap (and
+that the test-suite parity vectors were verified against); the JDK
+`java.security` (MessageDigest/SecureRandom) used by `util.clj` /
+`did_signal.clj` is platform, not vendor.
 
 **JVM (`.clj`, not `.cljc`) scope decision.** Unlike `kotoba-lang/ipfs`
 (real `.cljc` with a genuine CLJS `fetch`/`Blob` branch), this port ships
@@ -165,28 +172,17 @@ strength of a memorized spec or an assumption about a library's behavior.
 
 ## Development
 
-TypeScript:
-
 ```bash
-npm install
-npm run build
-npm test
+clojure -M:lint      # clj-kondo (errors fail)
+clojure -M:test      # cognitect test-runner (binds the BouncyCastle host impls)
 ```
 
-Clojure/CLJC:
-
-```bash
-clj-kondo --lint src test
-clojure -M:test
-```
-
-**`dist/` is committed** (unlike `kami-nv-compat`, which has no git-dependency
-consumers) — `etzhayyim-sdk` and other consumers install this package via a
-`git+ssh://` URL, and environments with a script-execution allowlist (e.g.
-`allow-scripts`) will not run the `prepare` build step on install. CI
-rebuilds and diffs `dist/` on every push to catch drift; after any `src/`
-change, run `npm run build` and commit the updated `dist/` in the same
-commit.
+Cross-language known-answer vectors (`test/kotoba/lang/pqh/vectors.edn`) can
+be regenerated from the @noble reference libs with
+`node scripts/gen-cross-lang-vectors.mjs` (install `@noble/ciphers`,
+`@noble/hashes`, `@noble/post-quantum`, `@noble/curves`, `@ipld/dag-cbor`
+ad hoc — the committed vectors are the source of truth; the script is
+provenance for how they were generated).
 
 ## License
 
