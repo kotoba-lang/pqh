@@ -4,7 +4,13 @@
 
    Lives under test/ (not src/) so the lib core stays vendor-free per
    ADR-2607012200: the pure core declares the IAead seam, the host supplies a
-   vetted impl. Consumers bring an equivalent impl on their own classpath."
+   vetted impl. Consumers bring an equivalent impl on their own classpath.
+
+   Correctly JVM-only .clj (not .cljc): directly imports org.bouncycastle.*
+   to implement the raw primitive. BouncyCastle is a :test-scoped dep
+   (deps.edn `:test` alias `org.bouncycastle/bcprov-jdk18on`, not `:deps`),
+   so this is a test fixture, not a production seam impl -- a real cljs
+   host impl would use @noble/ciphers instead (see crypto.cljc)."
   (:require [kotoba.lang.pqh.crypto :as crypto])
   (:import (org.bouncycastle.crypto.modes ChaCha20Poly1305)
            (org.bouncycastle.crypto.params AEADParameters KeyParameter)

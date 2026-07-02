@@ -3,7 +3,12 @@
    section of pq.test.ts, plus cross-language known-answer vectors
    (kotoba.lang.pqh.vectors) proving this namespace's Ed25519 sign/verify
    (via kotoba-lang/ed25519) is byte-identical to @noble/curves/ed25519 for
-   the same seed/message (both public key AND signature bytes)."
+   the same seed/message (both public key AND signature bytes).
+
+   Stays .clj (not .cljc): directly requires ed25519.core (JVM-only .clj
+   peer lib, no cljs port yet) and binds pq/*pq* to the JVM-only
+   BouncyCastle fixture kotoba.lang.pqh.pq-bc. No cljs test runner exists
+   in this repo either way (see crypto-test's docstring)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [ed25519.core :as ed]
             [kotoba.lang.pqh.did-signal :as ds]

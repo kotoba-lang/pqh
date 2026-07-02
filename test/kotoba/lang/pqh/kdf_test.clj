@@ -2,7 +2,12 @@
   "Port of kdf.test.ts, plus cross-language known-answer vectors
    (kotoba.lang.pqh.vectors) proving this namespace's Argon2id (via Bouncy
    Castle's Argon2BytesGenerator) is byte-identical to @noble/hashes'
-   argon2id for the same password/salt/params."
+   argon2id for the same password/salt/params.
+
+   Stays .clj (not .cljc): binds kdf/*kdf* to the JVM-only BouncyCastle
+   fixture kotoba.lang.pqh.kdf-bc, and kotoba.lang.pqh.vectors' resource
+   loading is :clj-only too. No cljs test runner exists in this repo, so
+   renaming to .cljc would be cosmetic (see crypto-test's docstring)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.kdf :as kdf]
             [kotoba.lang.pqh.kdf-bc :as kdf-bc]

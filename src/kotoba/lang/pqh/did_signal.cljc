@@ -1,6 +1,6 @@
 (ns kotoba.lang.pqh.did-signal
   "DID <-> Signal IdentityKey binding verification (did:web / did:plc /
-   did:key), with optional ML-DSA-65 hybrid signature -- JVM port of pqh's
+   did:key), with optional ML-DSA-65 hybrid signature -- port of pqh's
    src/did-signal.ts. Per ADR-2605181100 + ADR-2606111300 (etzhayyim/root).
 
    Signature scheme: Ed25519 over canonical dag-cbor-encoded body (optionally
@@ -21,20 +21,40 @@
    keys canonically regardless of insertion order, so the exact key STRINGS
    matter but their order in the map literal does not).
 
-   JVM-only for the (optional) PQ-hybrid path (no Web Crypto ML-DSA), but
-   this namespace's Ed25519-only baseline (sign-signal-identity /
-   verify-signal-identity / canonical-signing-bytes / signal-identity-
-   fingerprint) is, in principle, the best CLJS-port candidate in this
-   package (Ed25519 sign/verify is in the current Web Crypto spec, and
-   canonical CBOR is portable pure-data logic) -- deferred to a follow-up
-   rather than shipped here unverified, since this repo has no CLJS
-   build/test tooling yet to check a hand-written Web Crypto branch against;
-   see the README \"Clojure/CLJC port\" section."
-  (:require [ed25519.core :as ed]
-            [cbor.core :as cbor]
-            [kotoba.lang.pqh.util :as u]
+   .cljc per ADR-2607012200 (\"no unguarded java.*/js.* in core\"):
+   signal-identity-fingerprint (SHA-256-based, via util.cljc) and the
+   multicodec byte constants are genuinely portable. Everything that
+   signs/verifies is :clj-only with throwing cljs stubs: this namespace
+   delegates Ed25519 to the peer lib `ed25519.core` and canonical dag-cbor
+   to `cbor.core`, and BOTH peer libs are themselves JVM-only .clj (no
+   .cljs/.cljc port exists yet in kotoba-lang) -- so this namespace cannot
+   be genuinely dual until those peer libs are ported too, independent of
+   any work done here. This baseline path (Ed25519-only, no PQ) is,
+   per the README \"Clojure/CLJC port\" section, the best future cljs
+   candidate in this package (Ed25519 sign/verify IS in the current Web
+   Crypto spec) -- deferred to a follow-up on the peer libs, not attempted
+   unverified here."
+  (:require [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.pq :as pq]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            #?(:clj [ed25519.core :as ed])
+            #?(:clj [cbor.core :as cbor])))
+
+(def ^:private MLDSA65-PUB-BYTES 1952)
+;; mldsa-65-pub = 0x1211 (multicodec registry, draft; FIPS 204) -> varint [0x91 0x24].
+(def ^:private MLDSA65-MULTICODEC-0 0x91)
+(def ^:private MLDSA65-MULTICODEC-1 0x24)
+
+(defn signal-identity-fingerprint
+  "Fingerprint of a Signal IdentityKey (\"safety number\" pattern). First 16
+   hex chars of SHA-256."
+  ^String [^bytes identity-key]
+  (subs (u/bytes->hex (u/sha256 identity-key)) 0 16))
+
+;; ── signing/verification (:clj-only -- see ns docstring) ────────────────
+
+#?(:clj
+(do
 
 ;; ── canonical signing bytes + Ed25519 ────────────────────────────────────
 
@@ -97,18 +117,7 @@
           (nil? pq-signature) false
           :else (pq/ml-dsa-verify did-pq-verification-key msg pq-signature))))))
 
-(defn signal-identity-fingerprint
-  "Fingerprint of a Signal IdentityKey (\"safety number\" pattern). First 16
-   hex chars of SHA-256."
-  ^String [^bytes identity-key]
-  (subs (u/bytes->hex (u/sha256 identity-key)) 0 16))
-
 ;; ── DID-document key extraction (pqh-v1, ADR-2606111300) ─────────────────
-
-(def ^:private MLDSA65-PUB-BYTES 1952)
-;; mldsa-65-pub = 0x1211 (multicodec registry, draft; FIPS 204) -> varint [0x91 0x24].
-(def ^:private MLDSA65-MULTICODEC-0 0x91)
-(def ^:private MLDSA65-MULTICODEC-1 0x24)
 
 (defn pq-verification-key-from-did-doc
   "Extract the DID's ML-DSA-65 verification key from a resolved DID document
@@ -132,3 +141,20 @@
                           (java.util.Arrays/copyOfRange decoded 2 (alength decoded))))
                       (catch Exception _ nil)))))
               vm)))))
+
+)) ;; end #?(:clj (do ...))
+
+#?(:cljs
+(do
+  (defn- nope [n]
+    (throw (ex-info (str "kotoba.lang.pqh.did-signal/" n " is :clj-only for now "
+                         "(delegates to the JVM-only peer libs ed25519.core and "
+                         "cbor.core, neither of which has a cljs port yet -- see "
+                         "README \"Clojure/CLJC port\")")
+                    {})))
+  (defn canonical-signing-bytes [& _] (nope "canonical-signing-bytes"))
+  (defn sign-signal-identity [& _] (nope "sign-signal-identity"))
+  (defn verify-signal-identity [& _] (nope "verify-signal-identity"))
+  (defn sign-signal-identity-hybrid [& _] (nope "sign-signal-identity-hybrid"))
+  (defn verify-signal-identity-hybrid [& _] (nope "verify-signal-identity-hybrid"))
+  (defn pq-verification-key-from-did-doc [& _] (nope "pq-verification-key-from-did-doc"))))

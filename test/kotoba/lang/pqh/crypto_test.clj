@@ -2,7 +2,14 @@
   "Port of crypto.test.ts, plus cross-language known-answer vectors
    (kotoba.lang.pqh.vectors) proving this namespace's XChaCha20-Poly1305 AEAD
    and canonical CBOR encoding are byte-identical to @noble/ciphers'
-   xchacha20poly1305 and @ipld/dag-cbor's encode -- not just \"does it run\"."
+   xchacha20poly1305 and @ipld/dag-cbor's encode -- not just \"does it run\".
+
+   Stays .clj (not .cljc): binds crypto/*aead* to the JVM-only BouncyCastle
+   fixture kotoba.lang.pqh.aead-bc, and kotoba.lang.pqh.vectors' resource
+   loading is :clj-only too (see both namespaces' docstrings). There is no
+   cljs test runner in this repo (deps.edn's :test alias only wires
+   cognitect.test-runner for :clj), so every assertion here is JVM-only
+   regardless of file extension -- renaming to .cljc would be cosmetic."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [cbor.core :as cbor]
             [kotoba.lang.pqh.crypto :as crypto]

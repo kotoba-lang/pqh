@@ -4,7 +4,14 @@
 
    Lives under test/ (not src/) so the lib core stays vendor-free per
    ADR-2607012200: the pure core declares the IPq seam, the host supplies a
-   vetted impl. Consumers bring an equivalent impl on their own classpath."
+   vetted impl. Consumers bring an equivalent impl on their own classpath.
+
+   Correctly JVM-only .clj (not .cljc): directly imports org.bouncycastle.*
+   to implement the raw primitives. BouncyCastle is a :test-scoped dep
+   (deps.edn `:test` alias `org.bouncycastle/bcprov-jdk18on`, not `:deps`),
+   so this is a test fixture, not a production seam impl -- a real cljs
+   host impl would use @noble/curves + @noble/post-quantum + @noble/hashes
+   instead (see pq.cljc)."
   (:require [kotoba.lang.pqh.pq :as pq])
   (:import (org.bouncycastle.crypto.params X25519PrivateKeyParameters X25519PublicKeyParameters
                                             HKDFParameters)

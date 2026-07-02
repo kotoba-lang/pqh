@@ -1,6 +1,10 @@
 (ns kotoba.lang.pqh.signal-test
   "Port of signal.test.ts (deprecated stand-in) + the pqh-v1 session section
-   of pq.test.ts."
+   of pq.test.ts.
+
+   Stays .clj (not .cljc): binds crypto/*aead* and pq/*pq* to the JVM-only
+   BouncyCastle fixtures kotoba.lang.pqh.aead-bc/pq-bc. No cljs test runner
+   exists in this repo either way (see crypto-test's docstring)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.signal :as sig]
             [kotoba.lang.pqh.pq :as pq]

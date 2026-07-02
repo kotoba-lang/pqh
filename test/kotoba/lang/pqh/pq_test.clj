@@ -8,7 +8,14 @@
      - HKDF-SHA256 (the KEM combiner) matches @noble/hashes/hkdf
    See kotoba.lang.pqh.pq's namespace docstring for the one documented,
    deliberate divergence from the TS API (ML-DSA-65 secret-key
-   representation)."
+   representation).
+
+   Stays .clj (not .cljc): binds pq/*pq* to the JVM-only BouncyCastle
+   fixture kotoba.lang.pqh.pq-bc AND directly imports org.bouncycastle.*
+   itself for independent cross-vector verification (x25519/hkdf/mlkem/
+   mldsa-matches-noble below) -- there is no cljs equivalent to cross-check
+   against without a real @noble/* host impl. No cljs test runner exists in
+   this repo either way (see crypto-test's docstring)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.pq-bc :as pq-bc]
