@@ -1,13 +1,25 @@
 (ns kotoba.lang.pqh.crypto
-  "Tahoe-pattern AEAD envelope for AT Protocol MST -- JVM port of pqh's
+  "Tahoe-pattern AEAD envelope for AT Protocol MST -- port of pqh's
    src/crypto.ts. Per ADR-2605181100 (etzhayyim/root). Algorithm:
    XChaCha20-Poly1305 (24-byte nonce, 16-byte tag) over dag-cbor, with an
    ISO/IEC-7816-4 padding-bucket scheme.
 
-   JVM-only (see this repo's README \"Clojure/CLJC port\" section for why:
-   XChaCha20-Poly1305 has no Web Crypto native primitive, so a genuine CLJS
-   branch would mean hand-porting @noble/ciphers' pure-JS implementation
-   into ClojureScript -- deferred, not attempted unverified in this port).
+   .cljc per ADR-2607012200 (\"no unguarded java.*/js.* in core\"): the
+   IAead protocol, seam bookkeeping, generate-key/-nonce, key-id-of,
+   pick-bucket, and ISO/IEC-7816-4 pad-iso7816/unpad-iso7816 are genuine
+   dual :clj/:cljs implementations (pure arithmetic + util.cljc's portable
+   byte-array helpers) -- 'ISO-7816 pad/unpad, pickBucket, keyIdOf' are
+   real cljs today, not stubs.
+
+   The HChaCha20 subkey derivation + the XChaCha20-Poly1305 pipeline, and
+   the envelope encrypt/decrypt, stay :clj-only with throwing cljs stubs:
+   HChaCha20's fixed-width 32-bit-wraparound math (unchecked-add-int,
+   Integer/rotateLeft) would need a from-scratch ToInt32-coerced cljs
+   rewrite this repo has no build/test tooling to verify against, and
+   encrypt/decrypt call `cbor.core` (kotoba-lang/dag-cbor), itself a
+   JVM-only .clj peer lib with no cljs port yet -- so those two are blocked
+   on a peer-lib port regardless of this namespace. Deferred, not attempted
+   unverified. See README \"Clojure/CLJC port\".
 
    XChaCha20-Poly1305 is composed from two verified building blocks:
    HChaCha20 subkey derivation (hand-rolled here, cross-checked byte-for-byte
@@ -19,10 +31,10 @@
    (key, 24-byte nonce, aad, plaintext) is verified byte-identical to
    @noble/ciphers' xchacha20poly1305 in this port's test suite
    (kotoba.lang.pqh.crypto-test)."
-  (:require [cbor.core :as cbor]
-            [kotoba.lang.pqh.util :as u])
-  (:import (java.time Instant)
-           (java.util Arrays)))
+  (:require [kotoba.lang.pqh.util :as u]
+            #?(:clj [cbor.core :as cbor]))
+  #?(:clj (:import (java.time Instant)
+                    (java.util Arrays))))
 
 (def AEAD-ALG "xchacha20poly1305")
 (def ENVELOPE-VERSION 1)
@@ -38,6 +50,7 @@
 ;; The pure core never imports a vendor crypto SDK; the raw IETF
 ;; ChaCha20-Poly1305 primitive is supplied by the host via IAead. Bind
 ;; `*aead*` (e.g. to kotoba.lang.pqh.aead-bc/bc-aead) before AEAD calls.
+;; Pure data/interface -- unconditional on both platforms.
 
 (defprotocol IAead
   "Raw IETF ChaCha20-Poly1305 AEAD -- 32-byte key, 12-byte nonce, 128-bit tag.
@@ -54,6 +67,8 @@
       (throw (ex-info
                "[kotoba.lang.pqh/crypto] *aead* not bound -- bind an IAead impl (e.g. kotoba.lang.pqh.aead-bc/bc-aead) before AEAD calls"
                {}))))
+
+;; ── portable: keygen, key-id, padding-bucket selection, ISO/IEC 7816-4 ─────
 
 (defn generate-key
   "Fresh 32-byte XChaCha20-Poly1305 key."
@@ -88,9 +103,10 @@
              (str "[kotoba.lang.pqh/crypto] padding target " target-len
                   " too small for plaintext " (alength plain) " + delimiter")
              {:target-len target-len :plain-len (alength plain)})))
-  (let [out (byte-array target-len)]
-    (System/arraycopy plain 0 out 0 (alength plain))
-    (aset-byte out (alength plain) (unchecked-byte 0x80))
+  (let [out (u/new-bytes target-len)
+        plain-len (alength plain)]
+    (dotimes [i plain-len] (aset out i (aget plain i)))
+    (aset out plain-len (unchecked-byte 0x80))
     out))
 
 (defn unpad-iso7816
@@ -101,10 +117,16 @@
       (and (>= i 0) (zero? (aget padded i))) (recur (dec i))
       (or (< i 0) (not= (unchecked-byte 0x80) (aget padded i)))
       (throw (ex-info "[kotoba.lang.pqh/crypto] invalid ISO/IEC 7816-4 padding" {}))
-      :else (Arrays/copyOfRange padded 0 i))))
+      :else (u/copy-of-range padded 0 i))))
 
-;; ── HChaCha20 (hand-rolled; matches @noble/ciphers' hchacha() 1:1) ──────────
-;; Pure permutation, NO feedforward addition (unlike a normal ChaCha20 block).
+;; ── HChaCha20 + XChaCha20-Poly1305 pipeline + envelope (:clj-only, see ns
+;; docstring) ────────────────────────────────────────────────────────────
+
+#?(:clj
+(do
+
+;; HChaCha20 (hand-rolled; matches @noble/ciphers' hchacha() 1:1). Pure
+;; permutation, NO feedforward addition (unlike a normal ChaCha20 block).
 ;; All words are Java `int` (32-bit wraparound) -- unchecked-int/-add-int
 ;; throughout, never the range-checked `int`/`+`.
 
@@ -245,3 +267,18 @@
   (let [padded (xchacha20poly1305-decrypt key (:nonce envelope) aad (:ciphertext envelope))
         plaintext-bytes (if (= (:pad envelope) PAD-SCHEME-ISO7816) (unpad-iso7816 padded) padded)]
     (cbor/decode plaintext-bytes)))
+
+)) ;; end #?(:clj (do ...))
+
+#?(:cljs
+(do
+  (defn- nope [n]
+    (throw (ex-info (str "kotoba.lang.pqh.crypto/" n " is :clj-only for now "
+                         "(HChaCha20's 32-bit-wraparound math and the cbor.core "
+                         "peer lib have no cljs port yet -- see README \"Clojure/"
+                         "CLJC port\")")
+                    {})))
+  (defn xchacha20poly1305-encrypt [& _] (nope "xchacha20poly1305-encrypt"))
+  (defn xchacha20poly1305-decrypt [& _] (nope "xchacha20poly1305-decrypt"))
+  (defn encrypt [& _] (nope "encrypt"))
+  (defn decrypt [& _] (nope "decrypt"))))

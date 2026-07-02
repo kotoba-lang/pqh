@@ -1,5 +1,5 @@
 (ns kotoba.lang.pqh.pq
-  "Post-quantum hybrid layer (suite \"pqh-v1\") -- JVM port of pqh's
+  "Post-quantum hybrid layer (suite \"pqh-v1\") -- port of pqh's
    src/pq.ts. Per ADR-2606111300 (etzhayyim/root):
 
      KEM: X25519 + ML-KEM-768 (FIPS 203) -> HKDF-SHA256 combiner.
@@ -18,8 +18,16 @@
    (kotoba.lang.pqh.pq-test) -- see the README \"Clojure/CLJC port\" section for
    exactly what was verified and one documented, deliberate divergence (below).
 
-   JVM-only: ML-KEM-768/ML-DSA-65 have no Web Crypto browser primitive at all,
-   so this whole namespace is JVM-only by necessity (not a scope choice)."
+   .cljc, genuinely dual :clj/:cljs (ADR-2607012200, \"no unguarded
+   java.*/js.* in core\"): pure KEM-combiner orchestration, transcript
+   hashing, and suite bookkeeping over the injected IPq seam. The two
+   platform-specific spots (the KEM-combiner salt's UTF-8 bytes, and
+   ml-dsa-verify's catch-all) go through util.cljc/utf8-bytes and a `#?()`
+   exception-class conditional respectively. No raw X25519/ML-KEM/ML-DSA/
+   HKDF math lives here -- ML-KEM-768/ML-DSA-65 have no Web Crypto browser
+   primitive at all, so a real cljs IPq host impl needs @noble/curves +
+   @noble/post-quantum + @noble/hashes regardless of what this namespace
+   does."
   (:require [kotoba.lang.pqh.util :as u]))
 
 (def PQ-SUITE "pqh-v1")
@@ -30,7 +38,7 @@
 (def MLDSA65-PUBLIC-BYTES 1952)
 (def HYBRID-SHARED-SECRET-BYTES 32)
 
-(def ^:private KEM-COMBINER-SALT (.getBytes "etzhayyim/pqh-v1/kem" "UTF-8"))
+(def ^:private KEM-COMBINER-SALT (u/utf8-bytes "etzhayyim/pqh-v1/kem"))
 
 ;; ── PQ capability seam ────────────────────────────────────────────────────
 ;; The pure core never imports a vendor crypto SDK; the raw post-quantum +
@@ -85,7 +93,7 @@
   ^bytes [{:keys [ss-classical ss-pq transcript info]}]
   (let [pq (assert-pq)
         transcript-hash (u/sha256 (apply u/concat-bytes transcript))
-        info-bytes (u/concat-bytes transcript-hash (or info (byte-array 0)))
+        info-bytes (u/concat-bytes transcript-hash (or info (u/new-bytes 0)))
         ikm (u/concat-bytes ss-classical ss-pq)]
     (-hkdf-sha256 pq ikm KEM-COMBINER-SALT info-bytes HYBRID-SHARED-SECRET-BYTES)))
 
@@ -174,4 +182,4 @@
   [^bytes public-key ^bytes message ^bytes signature]
   (try
     (boolean (-mldsa-verify (assert-pq) public-key message signature))
-    (catch Exception _ false)))
+    (catch #?(:clj Exception :cljs :default) _ false)))

@@ -1,0 +1,136 @@
+(ns kotoba.lang.pqh.util
+  "Shared byte/hex/UTF-8/time/random/SHA-256 helpers used across the
+   kotoba.lang.pqh.* namespaces. Not part of pqh's TS surface -- an internal
+   convenience shared by this port's five modules.
+
+   .cljc per ADR-2607012200 (\"no unguarded java.*/js.* in core\"). Most of
+   this namespace is a genuine dual :clj/:cljs implementation: byte-array
+   indexing (array-copy!/copy-of-range/concat-bytes/bytes->hex/hex->bytes)
+   is pure arithmetic (aget/aset/byte-array/alength behave the same on a JVM
+   byte[] and a cljs array); UTF-8 codec (utf8-bytes/bytes->utf8-string),
+   now-ms, and random-bytes are spec-mandated platform APIs (JDK
+   String<->bytes / System.currentTimeMillis / SecureRandom vs Web
+   TextEncoder/TextDecoder / Date.now / crypto.getRandomValues) -- not
+   hand-ported algorithms, so giving them a real cljs branch carries none of
+   the \"unverified crypto port\" risk called out below.
+
+   `sha256` stays :clj-only: JVM's MessageDigest.digest() is synchronous,
+   but the only browser primitive (SubtleCrypto.digest) is Promise-based --
+   there is no synchronous Web Crypto SHA-256, so a same-signature cljs port
+   would need a hand-rolled pure-JS SHA-256 (e.g. @noble/hashes) that this
+   repo has no cljs build/test tooling to verify against (see README
+   \"Clojure/CLJC port\"). Its cljs stub throws rather than shipping an
+   unverified port silently."
+  #?(:clj (:import (java.security MessageDigest SecureRandom))))
+
+;; ── portable byte-array primitives ─────────────────────────────────────────
+;; aget/aset/alength/int-array are ordinary cljs.core fns too, BUT
+;; `byte-array` itself is NOT (verified against clj-kondo --lang cljs: it
+;; resolves aget/aset/alength/unchecked-byte/unchecked-int/bit-and fine but
+;; flags bare `byte-array` as an unresolved symbol) -- so every allocation
+;; site funnels through `new-bytes` below instead of calling `byte-array`
+;; unconditionally.
+
+(defn new-bytes
+  "Allocate `n` zero-filled bytes (JVM byte[] / cljs js/Uint8Array)."
+  ^bytes [^long n]
+  #?(:clj (byte-array n) :cljs (js/Uint8Array. n)))
+
+(defn- array-copy!
+  "Copy `len` elements from `src` (starting at `src-off`) into `dst`
+   (starting at `dst-off`). Mutates dst in place; returns nil."
+  [src src-off dst dst-off len]
+  (dotimes [i len] (aset dst (+ dst-off i) (aget src (+ src-off i)))))
+
+(defn copy-of-range
+  "Portable byte-array slice: elements [from, to) of `b`."
+  ^bytes [b from to]
+  (let [n (- to from)
+        out (new-bytes n)]
+    (array-copy! b from out 0 n)
+    out))
+
+(defn concat-bytes
+  "Concatenate any number of byte arrays into one."
+  ^bytes [& arrays]
+  (let [total (reduce + (map alength arrays))
+        out (new-bytes total)]
+    (loop [off 0 as arrays]
+      (if (seq as)
+        (let [a (first as) n (alength a)]
+          (array-copy! a 0 out off n)
+          (recur (+ off n) (rest as)))
+        out))))
+
+(def ^:private hex-chars "0123456789abcdef")
+
+(defn bytes->hex
+  "Byte array -> lowercase hex string. Pure bit arithmetic, portable (no
+   StringBuilder -- that's JVM-only; plain string concat is fine here)."
+  ^String [b]
+  (apply str
+         (mapcat (fn [by]
+                   (let [v (bit-and (int by) 0xff)]
+                     [(nth hex-chars (bit-shift-right v 4))
+                      (nth hex-chars (bit-and v 0xf))]))
+                 (seq b))))
+
+(defn hex->bytes
+  ^bytes [^String s]
+  (let [pairs (vec (partition 2 s))
+        out (new-bytes (count pairs))]
+    (dotimes [i (count pairs)]
+      (let [[a b] (nth pairs i)]
+        (aset out i
+              #?(:clj  (unchecked-byte (Integer/parseInt (str a b) 16))
+                 :cljs (unchecked-byte (js/parseInt (str a b) 16))))))
+    out))
+
+;; ── UTF-8 codec (JDK String<->bytes vs Web TextEncoder/TextDecoder --
+;; exact idiom already used in this ecosystem, e.g. net-kotobase/clj-edge's
+;; kotobase.cacao.cljc `(def te (js/TextEncoder.)) (.encode te s)`) ─────────
+
+(defn utf8-bytes
+  "UTF-8-encode a string to bytes."
+  ^bytes [^String s]
+  #?(:clj  (.getBytes s "UTF-8")
+     :cljs (js/Uint8Array. (.encode (js/TextEncoder.) s))))
+
+(defn bytes->utf8-string
+  "UTF-8-decode bytes to a string."
+  ^String [b]
+  #?(:clj  (String. ^bytes b "UTF-8")
+     :cljs (.decode (js/TextDecoder. "utf-8") b)))
+
+;; ── time ─────────────────────────────────────────────────────────────────
+
+(defn now-ms
+  "Current time, epoch milliseconds."
+  []
+  #?(:clj  (System/currentTimeMillis)
+     :cljs (js/Date.now)))
+
+;; ── CSPRNG (spec-mandated APIs, not a hand-ported algorithm) ────────────────
+
+#?(:clj (defonce ^:private secure-random (SecureRandom.)))
+
+(defn random-bytes
+  "n cryptographically-random bytes."
+  ^bytes [^long n]
+  #?(:clj  (let [b (byte-array n)] (.nextBytes secure-random b) b)
+     :cljs (let [b (js/Uint8Array. n)] (.getRandomValues js/crypto b) b)))
+
+;; ── SHA-256 (:clj-only -- see namespace docstring) ──────────────────────────
+
+#?(:clj
+   (defn sha256
+     ^bytes [^bytes b]
+     (.digest (MessageDigest/getInstance "SHA-256") b)))
+
+#?(:cljs
+   (defn sha256 [& _]
+     (throw (ex-info (str "[kotoba.lang.pqh/util] sha256 is :clj-only for now "
+                          "(no synchronous Web Crypto SHA-256; a same-signature "
+                          "cljs port needs a hand-rolled pure-JS SHA-256 this repo "
+                          "has no tooling to verify -- see README)")
+                     {}))))

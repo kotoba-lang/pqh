@@ -1,14 +1,19 @@
 (ns kotoba.lang.pqh.kdf
-  "Password-based key derivation seam (suite \"argon2id-v1\") -- JVM port of
+  "Password-based key derivation seam (suite \"argon2id-v1\") -- port of
    pqh's src/kdf.ts. Argon2id (RFC 9106) is an injected `IKdf` capability --
    bind `*kdf*` to a host impl (JVM BouncyCastle in the test fixture
    `kotoba.lang.pqh.kdf-bc`; cljs @noble/hashes). This namespace imports no
-   vendor SDK. Verified byte-identical to @noble/hashes' argon2id for the same
-   password/salt/params in this port's test suite (kotoba.lang.pqh.kdf-test).
+   vendor SDK. Verified byte-identical to @noble/hashes' argon2id for the
+   same password/salt/params in this port's test suite (kotoba.lang.pqh.kdf-test).
 
-   JVM-only: Web Crypto has no native Argon2id primitive (only PBKDF2/HKDF),
-   so a CLJS branch would mean hand-porting @noble/hashes' pure-JS Argon2id
-   into ClojureScript -- deferred; see this repo's README.")
+   .cljc, genuinely dual :clj/:cljs (ADR-2607012200, \"no unguarded
+   java.*/js.* in core\"): this namespace is pure orchestration + validation
+   over the injected IKdf seam. The only platform-specific piece (password
+   string -> UTF-8 bytes) goes through util.cljc/utf8-bytes. No raw
+   Argon2id math lives here -- and Web Crypto has no native Argon2id
+   primitive either way, so a real cljs host impl is the host's problem,
+   not this namespace's."
+  (:require [kotoba.lang.pqh.util :as u]))
 
 (def KDF-ARGON2ID-V1 "argon2id-v1")
 ;; Legacy suite id kept for read-compat envelope dispatch.
@@ -56,6 +61,6 @@
   (let [{:keys [m-kib t p]} params]
     (when (or (< m-kib (* 8 p)) (< t 1) (< p 1))
       (throw (ex-info "[kotoba.lang.pqh/kdf] invalid Argon2id parameters" {})))
-    (let [pw-bytes (if (string? password) (.getBytes ^String password "UTF-8") password)
+    (let [pw-bytes (if (string? password) (u/utf8-bytes password) password)
           out (-argon2id (assert-kdf) pw-bytes salt m-kib t p dk-len)]
       {:suite KDF-ARGON2ID-V1 :key out :params params})))

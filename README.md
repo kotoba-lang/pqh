@@ -6,11 +6,11 @@ binding, and a deprecated toy Signal-session stand-in.
 
 | Namespace | What it does |
 |---|---|
-| `crypto.clj` | XChaCha20-Poly1305 AEAD envelope (24-byte nonce, 16-byte tag) over dag-cbor, with an ISO/IEC-7816-4 padding-bucket scheme; raw AEAD behind the `IAead` seam |
-| `kdf.clj` | Argon2id (RFC 9106) password-based key derivation, suite `argon2id-v1`; raw Argon2id behind the `IKdf` seam |
-| `pq.clj` | Post-quantum hybrid layer, suite `pqh-v1`: X25519+ML-KEM-768 (FIPS 203) KEM combiner, Ed25519+ML-DSA-65 (FIPS 204) dual signatures; raw primitives behind the `IPq` seam |
-| `did_signal.clj` | DID&harr;Signal `IdentityKey` binding verification (did:web / did:plc / did:key), with optional ML-DSA-65 hybrid signature |
-| `signal.clj` | **Deprecated** in-memory session/key-wrap stand-in, retained only because a real test exercises the PQ-hybrid-into-session-wrap path against it |
+| `crypto.cljc` | XChaCha20-Poly1305 AEAD envelope (24-byte nonce, 16-byte tag) over dag-cbor, with an ISO/IEC-7816-4 padding-bucket scheme; raw AEAD behind the `IAead` seam |
+| `kdf.cljc` | Argon2id (RFC 9106) password-based key derivation, suite `argon2id-v1`; raw Argon2id behind the `IKdf` seam |
+| `pq.cljc` | Post-quantum hybrid layer, suite `pqh-v1`: X25519+ML-KEM-768 (FIPS 203) KEM combiner, Ed25519+ML-DSA-65 (FIPS 204) dual signatures; raw primitives behind the `IPq` seam |
+| `did_signal.cljc` | DID&harr;Signal `IdentityKey` binding verification (did:web / did:plc / did:key), with optional ML-DSA-65 hybrid signature |
+| `signal.cljc` | **Deprecated** in-memory session/key-wrap stand-in, retained only because a real test exercises the PQ-hybrid-into-session-wrap path against it |
 
 Zero business-logic coupling — every collection/DID/purpose value is a plain
 parameter, not a hardcoded etzhayyim NSID. Per ADR-2607012200 the pure core
@@ -51,9 +51,10 @@ moved behind injected-capability seams (`IAead`/`IKdf`/`IPq`).
 
 ## Clojure port
 
-`src/kotoba/lang/pqh/{crypto,kdf,pq,did_signal,signal}.clj` is a port of the
-five former TS modules, one namespace per file
-(`kotoba.lang.pqh.{crypto,kdf,pq,did-signal,signal}`), following the
+`src/kotoba/lang/pqh/{crypto,kdf,pq,did_signal,signal,util}.cljc` is a port
+of the five former TS modules (plus a shared `util.cljc` byte/UTF-8/time
+helper namespace), one namespace per file
+(`kotoba.lang.pqh.{crypto,kdf,pq,did-signal,signal,util}`), following the
 `kotoba.lang.*` namespace convention established by `kotoba-lang/crypto` and
 `kotoba-lang/ipfs`. Per ADR-2607012200 the pure core imports no vendor crypto
 SDK: the raw primitives are injected capabilities (`crypto/IAead`,
@@ -61,39 +62,57 @@ SDK: the raw primitives are injected capabilities (`crypto/IAead`,
 impls in `test/kotoba/lang/pqh/{aead,kdf,pq}_bc.clj`. The "crypto library
 choices" below name the BouncyCastle primitives those host impls wrap (and
 that the test-suite parity vectors were verified against); the JDK
-`java.security` (MessageDigest/SecureRandom) used by `util.clj` /
-`did_signal.clj` is platform, not vendor.
+`java.security` (MessageDigest/SecureRandom) used by `util.cljc` /
+`did_signal.cljc` is platform, not vendor.
 
-**JVM (`.clj`, not `.cljc`) scope decision.** Unlike `kotoba-lang/ipfs`
-(real `.cljc` with a genuine CLJS `fetch`/`Blob` branch), this port ships
-JVM-only for now, even though a plausible browser consumer for this package
-demonstrably exists (`60-apps/etzhayyim-project-karute`'s Svelte app
-encrypts PHI client-side via `@etzhayyim/sdk/encrypted`, and `kdf.ts`'s own
-docstring targets browser "vault unlock / key-bundle enroll"). The reason
-is narrower than "no browser use case" (witness-quorum's reason for going
-`.clj`-only) — it's that **every one of this package's five modules needs
-at least one primitive with zero Web Crypto browser coverage**:
-XChaCha20-Poly1305 AEAD (`crypto.ts`), Argon2id (`kdf.ts`), and ML-KEM-768 /
-ML-DSA-65 (`pq.ts`) all have no native `SubtleCrypto` primitive (Web Crypto
-covers AES-GCM/CBC/CTR + PBKDF2/HKDF, not XChaCha20 or Argon2id, and no
-browser ships lattice-based KEM/signature primitives at all). A genuine CLJS
-branch for those three modules would mean hand-porting `@noble/ciphers`' and
-`@noble/hashes`' own pure-JS implementations into ClojureScript from
-scratch — a real, separate undertaking, not a thin reader-conditional
-branch. `did-signal.ts`'s *baseline* path (Ed25519 sign/verify + canonical
-CBOR) is the one piece that could plausibly get a genuine Web-Crypto CLJS
-branch (Ed25519 sign/verify is in the current Web Crypto spec, and canonical
-CBOR encoding is portable pure-data logic) — but this repo has **no CLJS
-build/test tooling yet** to check a hand-written `js/crypto.subtle` branch
-against, and shipping an unverified crypto/CBOR-encoding CLJS path is
-exactly the kind of risk not worth taking silently. That branch is a
-well-scoped follow-up, not something forced into this PR for symmetry with
-`ipfs`. `signal.clj` is JVM-only because it depends on `crypto.clj` and
-`pq.clj`, both JVM-only.
+**`.cljc` status (updated, closes the earlier JVM-only gap).** `kdf.cljc`
+and `pq.cljc` are genuinely dual `:clj`/`:cljs` today: both are pure
+orchestration over their injected seam (`IKdf`/`IPq`), so nothing in
+either file needs the raw Argon2id/X25519/ML-KEM/ML-DSA math itself.
+`crypto.cljc`'s seam bookkeeping, `generate-key`/`generate-nonce`,
+`key-id-of`, `pick-bucket`, and ISO/IEC-7816-4 `pad-iso7816`/
+`unpad-iso7816` are real `:cljs` too (pure arithmetic over `util.cljc`'s
+portable byte-array helpers). `signal.cljc` is fully dual at the
+orchestration level (it has no direct `java.*`/`js.*` calls of its own).
+
+What's still `:clj`-only, with a throwing `:cljs` stub (not silently
+scoped out — see each namespace's docstring): **(1)** `crypto.cljc`'s
+HChaCha20 subkey derivation + the XChaCha20-Poly1305 pipeline
+(`xchacha20poly1305-encrypt`/`-decrypt`) and its dag-cbor-dependent
+`encrypt`/`decrypt` — HChaCha20's fixed-width 32-bit-wraparound math
+(`unchecked-add-int`, `Integer/rotateLeft`) would need a from-scratch
+ToInt32-coerced cljs rewrite this repo has no build/test tooling to verify
+byte-for-byte, and `encrypt`/`decrypt` call `cbor.core`
+(`kotoba-lang/dag-cbor`), itself a JVM-only `.clj` peer lib with no cljs
+port yet; **(2)** `did-signal.cljc`'s signing/verification functions
+(everything except `signal-identity-fingerprint`), which delegate to the
+peer libs `ed25519.core` (`kotoba-lang/ed25519`) and `cbor.core`
+(`kotoba-lang/dag-cbor`) — both JVM-only `.clj`, so this namespace cannot
+be genuinely dual until those peer libs are ported too, independent of any
+work done here; **(3)** `util.cljc`'s `sha256` — JVM's
+`MessageDigest.digest()` is synchronous but the only browser primitive
+(`SubtleCrypto.digest`) is Promise-based, so a same-signature cljs port
+needs a hand-rolled pure-JS SHA-256 (e.g. `@noble/hashes`) this repo has
+no tooling to verify.
+
+The underlying reason these three are hard is unchanged from the original
+scope decision below: **every one of this package's five modules needs at
+least one primitive with zero Web Crypto browser coverage**
+(XChaCha20-Poly1305 AEAD, Argon2id, and ML-KEM-768/ML-DSA-65 all have no
+native `SubtleCrypto` primitive), so a *host* cljs implementation of
+`IAead`/`IKdf`/`IPq` (via `@noble/ciphers`/`@noble/hashes`/
+`@noble/curves`+`@noble/post-quantum`) is still a separate, unattempted
+undertaking — this update makes the *core* genuinely portable per
+ADR-2607012200 ("no unguarded `java.*`/`js.*` in core"; a `.cljc` file that
+`require`s cleanly under both readers), it does not yet ship a working
+browser host. `did-signal.cljc`'s Ed25519-only baseline path remains the
+best future cljs candidate (Ed25519 sign/verify is in the current Web
+Crypto spec) once `ed25519.core`/`cbor.core` are ported — a well-scoped
+follow-up, not attempted unverified here.
 
 **Crypto library choices (JVM):**
 
-- **AEAD (`crypto.clj`)** — XChaCha20-Poly1305 is composed from two pieces:
+- **AEAD (`crypto.cljc`, BC host impl in `aead_bc.clj`)** — XChaCha20-Poly1305 is composed from two pieces:
   HChaCha20 subkey derivation (hand-rolled, ~30 lines, matching
   `@noble/ciphers`' exported `hchacha()` function instruction-for-instruction)
   plus Bouncy Castle's standard RFC 8439 `ChaCha20Poly1305` AEAD
@@ -102,9 +121,9 @@ well-scoped follow-up, not something forced into this PR for symmetry with
   directly, so composing it from HChaCha20 + standard ChaCha20-Poly1305 (the
   documented, standard construction) was the right call over vendoring a
   second AEAD library.
-- **KDF (`kdf.clj`)** — Bouncy Castle's `Argon2BytesGenerator` +
+- **KDF (`kdf.cljc`, BC host impl in `kdf_bc.clj`)** — Bouncy Castle's `Argon2BytesGenerator` +
   `Argon2Parameters.Builder(ARGON2_id)`, version `ARGON2_VERSION_13`.
-- **Ed25519 (`did-signal.clj`)** — delegates to the peer library
+- **Ed25519 (`did_signal.cljc`)** — delegates to the peer library
   `kotoba-lang/ed25519` (`ed25519.core`, a git dependency) rather than
   reimplementing Ed25519 or reaching for Bouncy Castle: JDK's own
   `java.security.KeyPairGenerator.getInstance("Ed25519")`, driven through a
@@ -118,12 +137,12 @@ well-scoped follow-up, not something forced into this PR for symmetry with
   `ed25519.core`'s `pubkey-from-seed`/`sign`/`verify` against
   `@noble/curves/ed25519` byte-for-byte (not just against its own JCA
   self-check).
-- **X25519 / ML-KEM-768 / ML-DSA-65 (`pq.clj`)** — Bouncy Castle
+- **X25519 / ML-KEM-768 / ML-DSA-65 (`pq.cljc`, BC host impl in `pq_bc.clj`)** — Bouncy Castle
   (`org.bouncycastle.crypto.params.X25519*`,
   `org.bouncycastle.pqc.crypto.mlkem.*`,
   `org.bouncycastle.pqc.crypto.mldsa.*`). HKDF-SHA256 (the KEM combiner) is
   BC's `HKDFBytesGenerator`.
-- **Canonical CBOR** (`crypto.clj`'s plaintext envelope, `did-signal.clj`'s
+- **Canonical CBOR** (`crypto.cljc`'s plaintext envelope, `did_signal.cljc`'s
   signing bytes) — delegates to the peer library `kotoba-lang/dag-cbor`
   (`cbor.core`, a git dependency), not reimplemented.
 
