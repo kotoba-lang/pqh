@@ -47,8 +47,8 @@
 
 (defprotocol IPq
   "Raw post-quantum + asymmetric primitives. Host supplies a vetted impl
-   (JVM BouncyCastle; a future cljs impl would use @noble/curves +
-   @noble/post-quantum + @noble/hashes)."
+   (JVM BouncyCastle; the cljs impl uses the Noble curves, post-quantum,
+   and hashes packages)."
   (-x25519-generate [this])
   (-x25519-dh [this secret-bytes public-bytes])
   (-mlkem-generate [this])

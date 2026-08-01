@@ -14,13 +14,10 @@
    hand-ported algorithms, so giving them a real cljs branch carries none of
    the \"unverified crypto port\" risk called out below.
 
-   `sha256` stays :clj-only: JVM's MessageDigest.digest() is synchronous,
-   but the only browser primitive (SubtleCrypto.digest) is Promise-based --
-   there is no synchronous Web Crypto SHA-256, so a same-signature cljs port
-   would need a hand-rolled pure-JS SHA-256 (e.g. @noble/hashes) that this
-   repo has no cljs build/test tooling to verify against (see README
-   \"Clojure/CLJC port\"). Its cljs stub throws rather than shipping an
-   unverified port silently."
+   `sha256` uses JVM MessageDigest on Clojure and @noble/hashes on
+   ClojureScript. The latter keeps the pure KEM combiner synchronous and is
+   exercised by net-kotobase's browser ESM conformance target."
+  #?(:cljs (:require ["@noble/hashes/sha2.js" :as noble-sha]))
   #?(:clj (:import (java.security MessageDigest SecureRandom))))
 
 ;; ── portable byte-array primitives ─────────────────────────────────────────
@@ -120,7 +117,7 @@
   #?(:clj  (let [b (byte-array n)] (.nextBytes secure-random b) b)
      :cljs (let [b (js/Uint8Array. n)] (.getRandomValues js/crypto b) b)))
 
-;; ── SHA-256 (:clj-only -- see namespace docstring) ──────────────────────────
+;; ── SHA-256 ────────────────────────────────────────────────────────────────
 
 #?(:clj
    (defn sha256
@@ -128,9 +125,5 @@
      (.digest (MessageDigest/getInstance "SHA-256") b)))
 
 #?(:cljs
-   (defn sha256 [& _]
-     (throw (ex-info (str "[kotoba.lang.pqh/util] sha256 is :clj-only for now "
-                          "(no synchronous Web Crypto SHA-256; a same-signature "
-                          "cljs port needs a hand-rolled pure-JS SHA-256 this repo "
-                          "has no tooling to verify -- see README)")
-                     {}))))
+   (defn sha256 [b]
+     (noble-sha/sha256 b)))
