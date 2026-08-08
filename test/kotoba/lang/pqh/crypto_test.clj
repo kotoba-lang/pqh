@@ -150,9 +150,29 @@
     (is (= 4096 (crypto/pick-bucket (- 1024 crypto/AEAD-TAG-BYTES))))
     (is (= 65536 (crypto/pick-bucket 60000))))
 
+  (testing "every bucket boundary is exact: len+1+tag == bucket still fits, one more does not"
+    ;; The bug this ladder was extended to fix (ADR-2608070400 D6) was a block
+    ;; size landing exactly ON a boundary and silently overflowing to the next
+    ;; bucket. Pin the boundary at every rung, not just the first.
+    (doseq [[b next-b] (partition 2 1 crypto/PAD-BUCKETS)]
+      (is (= b (crypto/pick-bucket (- b 1 crypto/AEAD-TAG-BYTES)))
+          (str "largest plaintext that still fits bucket " b))
+      (is (= next-b (crypto/pick-bucket (- b crypto/AEAD-TAG-BYTES)))
+          (str "one byte more must spill from " b " to " next-b))))
+
+  (testing "the Merkle block size classes kotobase-peer declares all fit a bucket"
+    ;; kotobase-peer.block-sizing/size-classes, quoted. If that ladder moves and
+    ;; this is not updated, the fleet gate block-sizing-pad-alignment-check
+    ;; catches it — this is the cheap local echo of the same invariant.
+    (doseq [c [16367 32751 65519 131055]]
+      (is (some? (crypto/pick-bucket c))
+          (str "block size class " c " must be inline-paddable"))
+      (is (<= (/ (double (- (crypto/pick-bucket c) c)) c) 0.01)
+          (str "block size class " c " must sit just under its bucket"))))
+
   (testing "pick-bucket throws when plaintext exceeds largest bucket"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exceeds"
-                          (crypto/pick-bucket 100000))))
+                          (crypto/pick-bucket 300000))))
 
   (testing "encrypt(:pad :bucket) yields ciphertext exactly equal to the bucket size"
     (let [key (crypto/generate-key)

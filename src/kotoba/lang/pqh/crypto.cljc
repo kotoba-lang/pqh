@@ -42,8 +42,36 @@
 (def KEY-BYTES 32)
 (def AEAD-TAG-BYTES 16)
 
-;; Padding bucket schedule per ADR-2605181200.
-(def PAD-BUCKETS [1024 4096 16384 65536])
+;; Padding bucket schedule. Originally ADR-2605181200's [1024 4096 16384 65536];
+;; extended 2026-08-08 per superproject ADR-2608070400 D6.
+;;
+;; Why it was extended: the bucket ladder and `kotobase-peer`'s Merkle block
+;; size classes [16384 32768 65536 131072] are chosen by different owners for
+;; different reasons (padding hides length; block classes tune sync
+;; granularity), and nothing checked that a block could actually be padded.
+;; Measured 2026-08-07, all four classes were pathological — a class sitting
+;; exactly ON a bucket boundary is the worst case, because `pick-bucket` needs
+;; `len + 1 + 16` and so overflows to the next bucket:
+;;
+;;   16384 -> needs 16401 -> 65536   (+300%)
+;;   32768 -> needs 32785 -> 65536   (+100%)
+;;   65536 -> needs 65553 -> none    (ciphertextBlob; inline padding bypassed)
+;;   131072 -> needs 131089 -> none  (same)
+;;
+;; Adding 32768/131072/262144 lets each class sit just under a bucket instead
+;; (`kotobase-peer` moved to [16367 32751 65519 131055], 0.0-0.1% overhead).
+;;
+;; **This is backward compatible for reads.** `unpad-iso7816` scans backwards
+;; for the 0x80 delimiter and never consults this list, so ciphertext padded
+;; to the old ladder still decrypts unchanged. Only future writes pick the
+;; tighter bucket.
+;;
+;; **The cost is length privacy.** Seven buckets resolve a plaintext's length
+;; more finely than four. That is the deliberate trade recorded in
+;; ADR-2608070400 (option B): keep the performance ladder's four classes and
+;; accept a finer length oracle, rather than drop classes to fit four buckets.
+;; The `block-sizing-pad-alignment-check` fleet gate enforces the pairing.
+(def PAD-BUCKETS [1024 4096 16384 32768 65536 131072 262144])
 (def PAD-SCHEME-ISO7816 "iso7816-4")
 
 ;; ── AEAD capability seam ──────────────────────────────────────────────────
