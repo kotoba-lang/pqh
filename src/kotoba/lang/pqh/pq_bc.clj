@@ -1,17 +1,9 @@
 (ns kotoba.lang.pqh.pq-bc
-  "JVM BouncyCastle host impl of kotoba.lang.pqh.pq/IPq -- the raw X25519,
-   ML-KEM-768 (FIPS 203), HKDF-SHA256, and ML-DSA-65 (FIPS 204) primitives.
+  "JVM BouncyCastle host implementation of kotoba.lang.pqh.pq/IPq.
 
-   Lives under test/ (not src/) so the lib core stays vendor-free per
-   ADR-2607012200: the pure core declares the IPq seam, the host supplies a
-   vetted impl. Consumers bring an equivalent impl on their own classpath.
-
-   Correctly JVM-only .clj (not .cljc): directly imports org.bouncycastle.*
-   to implement the raw primitives. BouncyCastle is a :test-scoped dep
-   (deps.edn `:test` alias `org.bouncycastle/bcprov-jdk18on`, not `:deps`),
-   so this is a test fixture, not a production seam impl -- a real cljs
-   host impl would use @noble/curves + @noble/post-quantum + @noble/hashes
-   instead (see pq.cljc)."
+   This is the production JVM provider for X25519, ML-KEM-768 (FIPS 203),
+   HKDF-SHA256, and ML-DSA-65 (FIPS 204). The portable orchestration remains
+   in pq.cljc; this namespace is deliberately JVM-only."
   (:require [kotoba.lang.pqh.pq :as pq])
   (:import (org.bouncycastle.crypto.params X25519PrivateKeyParameters X25519PublicKeyParameters
                                             HKDFParameters)
@@ -30,8 +22,7 @@
 (def ^:private mldsa-params MLDSAParameters/ml_dsa_65)
 
 (defn bc-pq
-  "Returns an IPq backed by BouncyCastle (X25519 + ML-KEM-768 + HKDF-SHA256 +
-   ML-DSA-65)."
+  "Return a fresh IPq adapter backed by BouncyCastle."
   []
   (reify pq/IPq
     (-x25519-generate [_]
