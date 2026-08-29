@@ -17,16 +17,21 @@
                                                MLDSAPublicKeyParameters MLDSASigner)
            (java.security SecureRandom)))
 
-(def ^:private secure-random (SecureRandom.))
 (def ^:private mlkem-params MLKEMParameters/ml_kem_768)
 (def ^:private mldsa-params MLDSAParameters/ml_dsa_65)
+
+(defn- secure-random
+  "Create the CSPRNG at operation time so native-image never captures a
+   build-host seed in its image heap."
+  []
+  (SecureRandom.))
 
 (defn bc-pq
   "Return a fresh IPq adapter backed by BouncyCastle."
   []
   (reify pq/IPq
     (-x25519-generate [_]
-      (let [priv (X25519PrivateKeyParameters. secure-random)]
+      (let [priv (X25519PrivateKeyParameters. (secure-random))]
         [(.getEncoded priv) (.getEncoded (.generatePublicKey priv))]))
     (-x25519-dh [_ secret public]
       (let [priv (X25519PrivateKeyParameters. ^bytes secret)
@@ -36,13 +41,13 @@
         out))
     (-mlkem-generate [_]
       (let [kpg (doto (MLKEMKeyPairGenerator.)
-                  (.init (MLKEMKeyGenerationParameters. secure-random mlkem-params)))
+                  (.init (MLKEMKeyGenerationParameters. (secure-random) mlkem-params)))
             kp (.generateKeyPair kpg)]
         [(.getEncoded ^MLKEMPrivateKeyParameters (.getPrivate kp))
          (.getEncoded ^MLKEMPublicKeyParameters (.getPublic kp))]))
     (-mlkem-encapsulate [_ public]
       (let [pub (MLKEMPublicKeyParameters. mlkem-params ^bytes public)
-            gen (MLKEMGenerator. secure-random)
+            gen (MLKEMGenerator. (secure-random))
             encap (.generateEncapsulated gen pub)]
         [(.getEncapsulation encap) (.getSecret encap)]))
     (-mlkem-decapsulate [_ secret ciphertext]
