@@ -109,12 +109,17 @@
 
 ;; ── CSPRNG (spec-mandated APIs, not a hand-ported algorithm) ────────────────
 
-#?(:clj (defonce ^:private secure-random (SecureRandom.)))
+#?(:clj
+   (defn- secure-random
+     "Create the CSPRNG at operation time so native-image never captures a
+      build-host seed in its image heap."
+     []
+     (SecureRandom.)))
 
 (defn random-bytes
   "n cryptographically-random bytes."
   ^bytes [^long n]
-  #?(:clj  (let [b (byte-array n)] (.nextBytes secure-random b) b)
+  #?(:clj  (let [b (byte-array n)] (.nextBytes (secure-random) b) b)
      :cljs (let [b (js/Uint8Array. n)] (.getRandomValues js/crypto b) b)))
 
 ;; ── SHA-256 ────────────────────────────────────────────────────────────────
