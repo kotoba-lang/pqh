@@ -9,6 +9,7 @@ binding, and a deprecated toy Signal-session stand-in.
 | `crypto.cljc` | XChaCha20-Poly1305 AEAD envelope (24-byte nonce, 16-byte tag) over dag-cbor, with an ISO/IEC-7816-4 padding-bucket scheme; raw AEAD behind the `IAead` seam |
 | `kdf.cljc` | Argon2id (RFC 9106) password-based key derivation, suite `argon2id-v1`; raw Argon2id behind the `IKdf` seam |
 | `pq.cljc` | Post-quantum hybrid layer, suite `pqh-v1`: X25519+ML-KEM-768 (FIPS 203) KEM combiner, Ed25519+ML-DSA-65 (FIPS 204) dual signatures; raw primitives behind the `IPq` seam |
+| `pq_bc.clj` | Production JVM `IPq` provider backed by BouncyCastle 1.79 |
 | `did_signal.cljc` | DID&harr;Signal `IdentityKey` binding verification (did:web / did:plc / did:key), with optional ML-DSA-65 hybrid signature |
 | `signal.cljc` | **Deprecated** in-memory session/key-wrap stand-in, retained only because a real test exercises the PQ-hybrid-into-session-wrap path against it |
 
@@ -16,8 +17,9 @@ Zero business-logic coupling — every collection/DID/purpose value is a plain
 parameter, not a hardcoded etzhayyim NSID. Per ADR-2607012200 the pure core
 imports no vendor crypto SDK: the raw primitives (XChaCha20-Poly1305, Argon2id,
 X25519/ML-KEM/ML-DSA, HKDF) are injected capabilities (`IAead`/`IKdf`/`IPq`)
-bound via dynamic vars, with the JVM BouncyCastle host impls in the test
-fixtures `test/kotoba/lang/pqh/{aead,kdf,pq}_bc.clj`.
+bound via dynamic vars. The JVM BouncyCastle PQ provider is shipped from
+`src/kotoba/lang/pqh/pq_bc.clj`; the AEAD and KDF providers remain test
+fixtures until a production consumer requires them.
 
 ## Provenance
 
