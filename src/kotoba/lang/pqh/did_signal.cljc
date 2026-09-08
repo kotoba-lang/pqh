@@ -36,7 +36,7 @@
    unverified here."
   (:require [kotoba.lang.pqh.util :as u]
             [kotoba.lang.pqh.pq :as pq]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             #?(:clj [ed25519.core :as ed])
             #?(:clj [cbor.core :as cbor])))
 
