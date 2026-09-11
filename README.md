@@ -18,7 +18,7 @@ parameter, not a hardcoded etzhayyim NSID. Per ADR-2607012200 the pure core
 imports no vendor crypto SDK: the raw primitives (XChaCha20-Poly1305, Argon2id,
 X25519/ML-KEM/ML-DSA, HKDF) are injected capabilities (`IAead`/`IKdf`/`IPq`)
 bound via dynamic vars. The JVM BouncyCastle PQ provider is shipped from
-`src/kotoba/lang/pqh/pq_bc.clj`; the AEAD and KDF providers remain test
+`src/kotoba/lang/pqh/pq_bc.cljk`; the AEAD and KDF providers remain test
 fixtures until a production consumer requires them.
 
 ## Provenance
