@@ -194,8 +194,8 @@ strength of a memorized spec or an assumption about a library's behavior.
 ## Development
 
 ```bash
-clojure -M:lint      # clj-kondo (errors fail)
-clojure -M:test      # cognitect test-runner (binds the BouncyCastle host impls)
+kbb -M:lint      # clj-kondo (errors fail)
+kbb -M:test      # cognitect test-runner (binds the BouncyCastle host impls)
 ```
 
 Cross-language known-answer vectors (`test/kotoba/lang/pqh/vectors.edn`) can
