@@ -8,7 +8,7 @@
    fixture kotoba.lang.pqh.kdf-bc, and kotoba.lang.pqh.vectors' resource
    loading is :clj-only too. No cljs test runner exists in this repo, so
    renaming to .cljc would be cosmetic (see crypto-test's docstring)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.kdf :as kdf]
             [kotoba.lang.pqh.kdf-bc :as kdf-bc]
             [kotoba.lang.pqh.util :as u]

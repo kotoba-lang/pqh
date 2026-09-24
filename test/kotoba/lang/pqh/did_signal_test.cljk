@@ -9,7 +9,7 @@
    peer lib, no cljs port yet) and binds pq/*pq* to the JVM-only
    BouncyCastle fixture kotoba.lang.pqh.pq-bc. No cljs test runner exists
    in this repo either way (see crypto-test's docstring)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
             [ed25519.core :as ed]
             [kotoba.lang.pqh.did-signal :as ds]
             [kotoba.lang.pqh.pq :as pq]
