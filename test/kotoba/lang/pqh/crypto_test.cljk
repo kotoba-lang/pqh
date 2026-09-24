@@ -10,7 +10,7 @@
    cljs test runner in this repo (deps.edn's :test alias only wires
    cognitect.test-runner for :clj), so every assertion here is JVM-only
    regardless of file extension -- renaming to .cljc would be cosmetic."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
             [cbor.core :as cbor]
             [kotoba.lang.pqh.crypto :as crypto]
             [kotoba.lang.pqh.aead-bc :as aead-bc]

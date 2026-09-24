@@ -16,7 +16,7 @@
    mldsa-matches-noble below) -- there is no cljs equivalent to cross-check
    against without a real @noble/* host impl. No cljs test runner exists in
    this repo either way (see crypto-test's docstring)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]
