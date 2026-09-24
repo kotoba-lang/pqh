@@ -16,7 +16,7 @@
    mldsa-matches-noble below) -- there is no cljs equivalent to cross-check
    against without a real @noble/* host impl. No cljs test runner exists in
    this repo either way (see crypto-test's docstring)."
-  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.bytes :as kbytes] [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]
@@ -73,7 +73,7 @@
 
 ;; ── port of "pq hybrid KEM (pqh-v1)" ──────────────────────────────────────
 
-(defn- utf8 ^bytes [^String s] (.getBytes s "UTF-8"))
+(defn- utf8 ^bytes [^String s] (kbytes/utf8-bytes s))
 
 (deftest hybrid-kem
   (testing "encapsulate/decapsulate derive the same 32-byte shared secret"
