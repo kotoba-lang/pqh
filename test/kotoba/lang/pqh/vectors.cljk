@@ -12,7 +12,7 @@
    io/resource resource loading has no direct cljs equivalent without
    bundler-specific tooling this repo doesn't have (see README)."
   (:require [kotoba.lang.pqh.util :as u]
-            #?(:clj [clojure.edn :as edn])
+            #?(:clj [kotoba.lang.edn :as edn])
             #?(:clj [clojure.java.io :as io])))
 
 (defn hb ^bytes [hex-string] (u/hex->bytes hex-string))
