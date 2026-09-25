@@ -16,7 +16,7 @@
    mldsa-matches-noble below) -- there is no cljs equivalent to cross-check
    against without a real @noble/* host impl. No cljs test runner exists in
    this repo either way (see crypto-test's docstring)."
-  (:require [kotoba.bytes :as kbytes] [kotoba.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.lang.error :as kerror] [kotoba.bytes :as kbytes] [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.pq-bc :as pq-bc]
             [kotoba.lang.pqh.util :as u]
@@ -104,7 +104,7 @@
 
   (testing "rejects an unknown suite"
     (let [{:keys [public-bundle]} (pq/generate-hybrid-kem-key-pair)]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unsupported suite"
+      (is (thrown-with-msg? kerror/ExceptionInfo #"unsupported suite"
                             (pq/hybrid-encapsulate (assoc public-bundle :suite "rsa-2048")))))))
 
 ;; ── port of "pq ML-DSA-65" ─────────────────────────────────────────────────

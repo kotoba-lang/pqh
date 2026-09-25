@@ -31,7 +31,7 @@
    (key, 24-byte nonce, aad, plaintext) is verified byte-identical to
    @noble/ciphers' xchacha20poly1305 in this port's test suite
    (kotoba.lang.pqh.crypto-test)."
-  (:require [kotoba.lang.pqh.util :as u]
+  (:require [kotoba.bytes :as kbytes] [kotoba.lang.pqh.util :as u]
             #?(:clj [cbor.core :as cbor]))
   #?(:clj (:import (java.time Instant)
                     (java.util Arrays))))
@@ -160,7 +160,7 @@
 
 (def ^:private sigma32-words
   ;; "expand 32-byte k" as 4 little-endian u32 words.
-  (let [b (.getBytes "expand 32-byte k" "UTF-8")]
+  (let [b (kbytes/utf8-bytes "expand 32-byte k")]
     (mapv (fn [i] (unchecked-int
                     (bit-or (bit-and (aget b i) 0xff)
                             (bit-shift-left (bit-and (aget b (+ i 1)) 0xff) 8)
