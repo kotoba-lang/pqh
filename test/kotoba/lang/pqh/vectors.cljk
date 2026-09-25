@@ -13,7 +13,7 @@
    bundler-specific tooling this repo doesn't have (see README)."
   (:require [kotoba.lang.pqh.util :as u]
             #?(:clj [kotoba.lang.edn :as edn])
-            #?(:clj [clojure.java.io :as io])))
+            #?(:clj [kotoba.io :as io])))
 
 (defn hb ^bytes [hex-string] (u/hex->bytes hex-string))
 

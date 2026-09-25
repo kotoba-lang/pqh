@@ -18,7 +18,8 @@
    ClojureScript. The latter keeps the pure KEM combiner synchronous and is
    exercised by net-kotobase's browser ESM conformance target."
   #?(:cljs (:require ["@noble/hashes/sha2.js" :as noble-sha]))
-  #?(:clj (:import (java.security MessageDigest SecureRandom))))
+  #?(:clj (:import (java.security MessageDigest SecureRandom)))
+  (:require [kotoba.bytes :as kbytes]))
 
 ;; ── portable byte-array primitives ─────────────────────────────────────────
 ;; aget/aset/alength/int-array are ordinary cljs.core fns too, BUT
@@ -90,13 +91,13 @@
 (defn utf8-bytes
   "UTF-8-encode a string to bytes."
   ^bytes [^String s]
-  #?(:clj  (.getBytes s "UTF-8")
+  #?(:clj  (kbytes/utf8-bytes s)
      :cljs (js/Uint8Array. (.encode (js/TextEncoder.) s))))
 
 (defn bytes->utf8-string
   "UTF-8-decode bytes to a string."
   ^String [b]
-  #?(:clj  (String. ^bytes b "UTF-8")
+  #?(:clj  (kbytes/utf8-string ^bytes b)
      :cljs (.decode (js/TextDecoder. "utf-8") b)))
 
 ;; ── time ─────────────────────────────────────────────────────────────────

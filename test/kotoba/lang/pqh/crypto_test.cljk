@@ -10,7 +10,7 @@
    cljs test runner in this repo (deps.edn's :test alias only wires
    cognitect.test-runner for :clj), so every assertion here is JVM-only
    regardless of file extension -- renaming to .cljc would be cosmetic."
-  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.lang.error :as kerror] [kotoba.test :refer [deftest is testing use-fixtures]]
             [cbor.core :as cbor]
             [kotoba.lang.pqh.crypto :as crypto]
             [kotoba.lang.pqh.aead-bc :as aead-bc]
@@ -111,7 +111,7 @@
     (let [key (crypto/generate-key)
           env (crypto/encrypt {:key key :sender SENDER :plaintext {}})
           bumped (assoc env :v 99)]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"envelope version"
+      (is (thrown-with-msg? kerror/ExceptionInfo #"envelope version"
                             (crypto/decrypt {:key key :envelope bumped})))))
 
   (testing "key-id-of is deterministic and 16 hex chars"
@@ -137,11 +137,11 @@
       (is (= (seq (crypto/unpad-iso7816 padded)) (seq plain)))))
 
   (testing "pad-iso7816 rejects target too small"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"too small"
+    (is (thrown-with-msg? kerror/ExceptionInfo #"too small"
                           (crypto/pad-iso7816 (byte-array 10) 10))))
 
   (testing "unpad-iso7816 rejects missing delimiter"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"invalid"
+    (is (thrown-with-msg? kerror/ExceptionInfo #"invalid"
                           (crypto/unpad-iso7816 (byte-array 16)))))
 
   (testing "pick-bucket picks the smallest bucket that fits plaintext + delimiter + tag"
@@ -171,7 +171,7 @@
           (str "block size class " c " must sit just under its bucket"))))
 
   (testing "pick-bucket throws when plaintext exceeds largest bucket"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exceeds"
+    (is (thrown-with-msg? kerror/ExceptionInfo #"exceeds"
                           (crypto/pick-bucket 300000))))
 
   (testing "encrypt(:pad :bucket) yields ciphertext exactly equal to the bucket size"

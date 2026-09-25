@@ -8,7 +8,7 @@
    fixture kotoba.lang.pqh.kdf-bc, and kotoba.lang.pqh.vectors' resource
    loading is :clj-only too. No cljs test runner exists in this repo, so
    renaming to .cljc would be cosmetic (see crypto-test's docstring)."
-  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.lang.error :as kerror] [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.kdf :as kdf]
             [kotoba.lang.pqh.kdf-bc :as kdf-bc]
             [kotoba.lang.pqh.util :as u]
@@ -53,9 +53,9 @@
         (is (not= (hex (:key other-params)) (hex (:key base))))))
 
     (testing "rejects a short salt and degenerate params"
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"salt"
+      (is (thrown-with-msg? kerror/ExceptionInfo #"salt"
                             (kdf/derive-key-argon2id {:password "pw" :salt (u/random-bytes 4)})))
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"parameters"
+      (is (thrown-with-msg? kerror/ExceptionInfo #"parameters"
                             (kdf/derive-key-argon2id {:password "pw" :salt salt
                                                        :params {:m-kib 1 :t 1 :p 1}}))))
 

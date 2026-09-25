@@ -5,7 +5,7 @@
    Stays .clj (not .cljc): binds crypto/*aead* and pq/*pq* to the JVM-only
    BouncyCastle fixtures kotoba.lang.pqh.aead-bc/pq-bc. No cljs test runner
    exists in this repo either way (see crypto-test's docstring)."
-  (:require [kotoba.test :refer [deftest is testing use-fixtures]]
+  (:require [kotoba.lang.error :as kerror] [kotoba.test :refer [deftest is testing use-fixtures]]
             [kotoba.lang.pqh.signal :as sig]
             [kotoba.lang.pqh.pq :as pq]
             [kotoba.lang.pqh.crypto :as crypto]
@@ -53,11 +53,11 @@
   (testing "throws when unwrapping with an invalid session handle"
     (let [session (sig/establish-session {:sender-did sender-did :recipient-did recipient-did})
           {:keys [ciphertext]} (sig/wrap-key {:session session :plaintext "test"})]
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid session handle"
+      (is (thrown-with-msg? kerror/ExceptionInfo #"Invalid session handle"
                             (sig/unwrap-key {:session "invalid-session-handle" :ciphertext ciphertext})))))
 
   (testing "throws when wrapping with an invalid session handle"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid session handle"
+    (is (thrown-with-msg? kerror/ExceptionInfo #"Invalid session handle"
                           (sig/wrap-key {:session "invalid-session-handle" :plaintext "test"})))))
 
 ;; ── port of pq.test.ts's "signal pqh-v1 sessions" ─────────────────────────
